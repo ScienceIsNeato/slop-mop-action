@@ -52,10 +52,30 @@ jobs:
           # Public repos referencing the action in workflow files. --paginate
           # walks all pages (search API caps at 1000 results — far beyond
           # current scale; revisit with a since-qualifier sharding scheme if
-          # we ever get near it). A failure here exits non-zero and fails the
-          # run: a transient API error must never be committed as 0 users.
-          search_json=$(gh api --paginate \
-            "search/code?q=%22ScienceIsNeato%2Fslop-mop-action%22+path%3A.github%2Fworkflows&per_page=100")
+          # we ever get near it).
+          #
+          # The code-search endpoint has a much tighter budget than the rest of
+          # the API and 429s regularly on the shared Actions token (2 of the
+          # first 4 scheduled runs). Retry with backoff before giving up —
+          # then, if it still fails, exit non-zero: a transient API error must
+          # never be committed as "0 users".
+          search_json=""
+          for attempt in 1 2 3; do
+            if search_json=$(gh api --paginate \
+                "search/code?q=%22ScienceIsNeato%2Fslop-mop-action%22+path%3A.github%2Fworkflows&per_page=100" 2>/tmp/gh_err); then
+              break
+            fi
+            if [[ $attempt -eq 3 ]]; then
+              echo "::error::code search failed after 3 attempts:" >&2
+              cat /tmp/gh_err >&2
+              exit 1
+            fi
+            # 60s, then 150s — comfortably past the ~2min window gh reports on 429.
+            delay=$((attempt * 90 - 30))
+            echo "search attempt $attempt failed; retrying in ${delay}s" >&2
+            sed -n '1p' /tmp/gh_err >&2
+            sleep "$delay"
+          done
           repos=$(echo "$search_json" | python3 -c "
           import json, sys
           # --paginate emits one JSON object per page, concatenated; decode
