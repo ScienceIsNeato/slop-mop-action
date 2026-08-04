@@ -65,14 +65,22 @@ jobs:
                 "search/code?q=%22ScienceIsNeato%2Fslop-mop-action%22+path%3A.github%2Fworkflows&per_page=100" 2>/tmp/gh_err); then
               break
             fi
+            # Only rate limits and transient server errors are worth waiting
+            # out. An auth/config failure won't fix itself in 150s, so bail
+            # immediately rather than burning the runner.
+            if ! grep -qiE "try again|rate limit|429|50[234]" /tmp/gh_err; then
+              echo "::error::code search failed (not retryable):" >&2
+              cat /tmp/gh_err >&2
+              exit 1
+            fi
             if [[ $attempt -eq 3 ]]; then
-              echo "::error::code search failed after 3 attempts:" >&2
+              echo "::error::code search still rate-limited after 3 attempts:" >&2
               cat /tmp/gh_err >&2
               exit 1
             fi
             # 60s, then 150s — comfortably past the ~2min window gh reports on 429.
             delay=$((attempt * 90 - 30))
-            echo "search attempt $attempt failed; retrying in ${delay}s" >&2
+            echo "search attempt $attempt rate-limited; retrying in ${delay}s" >&2
             sed -n '1p' /tmp/gh_err >&2
             sleep "$delay"
           done
