@@ -1,7 +1,7 @@
 {
   "agent": {
-    "status": "Adding an option so the action can set up a project's own dependencies before scanning — closes the gap where some checks quietly looked at the wrong environment",
-    "direction": "Make adopting the action a true drop-in for the remaining repos",
-    "last_update": "2026-07-04T00:00:00Z"
+    "status": "Making the v2 tag follow main on its own — it had quietly fallen three releases behind, so everyone using the action was stuck on an old version",
+    "direction": "Stop shipping fixes that never actually reach the people using them",
+    "last_update": "2026-09-18T00:00:00Z"
   }
 }

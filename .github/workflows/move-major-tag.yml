@@ -1,0 +1,80 @@
+# Keep the v2 tag pointing at main.
+#
+# The pin PRs that Slop-Mop's release workflow opens land on main and stop
+# there. Consumers reference this action as @v2, which is a tag — so through
+# 2.13.x, 2.14.x and 2.15.0, main advertised a new slopmop pin while @v2 still
+# resolved to ==2.12.0 and no consumer received any of it. The tag was moved by
+# hand, once, months late.
+#
+# Nothing moved it because nothing was responsible for moving it. This is that
+# thing. main is protected and only advances through a reviewed PR, so "main
+# moved" is already a deliberate act, and @v2 following it is what the
+# major-tag convention promises consumers in the first place.
+name: Move major tag
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Two pushes to main in quick succession would race, and the loser could leave
+# v2 on the older commit. Serialize without cancelling: the last push to
+# complete must be the one the tag ends up on.
+concurrency:
+  group: move-major-tag
+  cancel-in-progress: false
+
+jobs:
+  move:
+    name: Point v2 at main
+    runs-on: ubuntu-latest
+    # Job-scoped (least privilege): pushing the tag is all this needs. The
+    # repo default for GITHUB_TOKEN is read-only, so this must be explicit.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0 # tags, so the current v2 can be compared
+
+      - name: Read the pin, refusing to publish an unparseable action
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A broken action.yml reaching @v2 breaks every consumer at once, and
+          # moving the tag is precisely the step that makes it their problem.
+          # PyYAML is not guaranteed on the runner image, so ask rather than
+          # assume.
+          python3 -c 'import yaml' 2>/dev/null || pip3 install --quiet pyyaml
+          pin="$(python3 scripts/read-pin.py)"
+          echo "action.yml parses; slopmop pin is ${pin}"
+          echo "pin=${pin}" >> "$GITHUB_OUTPUT"
+
+      - name: Move v2 to this commit
+        shell: bash
+        env:
+          SHA: ${{ github.sha }}
+          PIN: ${{ steps.check.outputs.pin }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          before="$(git rev-list -n1 v2 2>/dev/null || echo none)"
+          if [ "$before" = "$SHA" ]; then
+            echo "v2 already points at ${SHA}; nothing to do."
+            exit 0
+          fi
+
+          # Annotated, matching how v2 and the v2.x tags were made by hand.
+          git tag -f -a v2 "$SHA" -m "v2 — tracks main (slopmop ${PIN})"
+          git push --force origin v2
+
+          {
+            echo "### v2 moved"
+            echo ""
+            echo "\`${before}\` → \`${SHA}\`, pinning slopmop \`${PIN}\`."
+            echo ""
+            echo "Consumers on \`@v2\` pick this up on their next run."
+          } >> "$GITHUB_STEP_SUMMARY"
