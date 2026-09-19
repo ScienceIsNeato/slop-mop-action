@@ -218,6 +218,20 @@ surfaces it. Notes:
   budget) may have hidden failing gates; the letter is a floor, not a final.
 - Partial runs (custom `-g` args) don't emit a grade.
 
+## Versioning
+
+`@v2` is a moving tag that tracks `main`. When a pin bump or fix merges, a
+workflow repoints `v2` at the new commit, so consumers pick it up on their next
+run without changing anything.
+
+This is automatic on purpose. It used to be manual, and the result was that
+`main` carried pins for 2.13.x, 2.14.x and 2.15.0 while `@v2` still installed
+`==2.12.0` — every consumer stuck three releases back, with nothing anywhere
+saying so.
+
+Immutable `v2.x.y` tags are cut alongside notable releases for anyone who wants
+to pin exactly. They are not moved.
+
 ## Marketplace Notes
 
 This repository is designed for GitHub Marketplace publication:
@@ -225,5 +239,6 @@ This repository is designed for GitHub Marketplace publication:
 - `action.yml` lives at the repository root.
 - The repository contains only action metadata, action plumbing, docs, and a
   license.
-- No `.github/workflows` directory is included. Test this action from a
+- `.github/workflows` holds this repo's own maintenance jobs (usage metrics,
+  the `v2` tag move) — not tests of the action itself. Test the action from a
   separate scratch repository before publishing releases.
