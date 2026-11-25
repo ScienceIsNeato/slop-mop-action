@@ -1,7 +1,7 @@
 {
   "agent": {
-    "status": "Making the v2 tag follow main on its own — it had quietly fallen three releases behind, so everyone using the action was stuck on an old version",
-    "direction": "Stop shipping fixes that never actually reach the people using them",
-    "last_update": "2026-09-18T00:00:00Z"
+    "status": "Changing how the action installs the security scanner so its baggage stops counting as ours",
+    "direction": "Pairs with the slop-mop side; weekly scan should go green again",
+    "last_update": "2026-11-25T00:00:00Z"
   }
 }
