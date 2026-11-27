@@ -61,10 +61,18 @@ run() {
 # --- python tools: one batched pipx inject (exact pins) -------------------
 # `<name>` or `<name>==<version>` when a pin is declared. Batching keeps it to a
 # single resolver run for the whole set.
+#
+# `isolated` tools are excluded here and installed separately below. Injecting
+# a tool puts its whole dependency tree inside slop-mop's venv, which makes
+# that tree part of slop-mop's audited supply chain — semgrep's transitive
+# pins turned into four CVEs attributed to slop-mop and took its scanning gate
+# down for six weeks. A tool slop-mop only ever execs does not need to share
+# an interpreter with it.
 mapfile -t py_specs < <(
   jq -r '
     .requirements[]
     | select(.kind == "python")
+    | select((.isolated // false) | not)
     | if (.version // "") == "" then .name else "\(.name)==\(.version)" end
   ' "$MANIFEST_FILE"
 )
@@ -74,6 +82,24 @@ if [[ "${#py_specs[@]}" -gt 0 ]]; then
 else
   echo "No python tools in manifest."
 fi
+
+# --- isolated python tools: their own pipx app, one venv each -------------
+# pipx puts each app's bin on PATH, which is where slop-mop's find_tool looks
+# after the project venv and $VIRTUAL_ENV, so resolution is unchanged.
+mapfile -t isolated_specs < <(
+  jq -r '
+    .requirements[]
+    | select(.kind == "python")
+    | select(.isolated // false)
+    | if (.version // "") == "" then .name else "\(.name)==\(.version)" end
+  ' "$MANIFEST_FILE"
+)
+
+for spec in "${isolated_specs[@]+"${isolated_specs[@]}"}"; do
+  # --force so a re-run upgrades in place rather than failing on an existing
+  # install; these are pinned by the manifest, not by whatever ran last.
+  run pipx install --force "$spec"
+done
 
 # --- npm tools: global install under a local prefix -----------------------
 mapfile -t npm_specs < <(
